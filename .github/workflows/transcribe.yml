@@ -1,0 +1,23 @@
+name: Transcribe voice-over
+
+on:
+  workflow_dispatch:
+    inputs:
+      audio:
+        description: "Path to the audio file in the repo"
+        default: "public/vo/vo3.mp3"
+      model:
+        description: "faster-whisper model"
+        default: "large-v3"
+
+jobs:
+  transcribe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install --quiet faster-whisper
+      - run: python scripts/transcribe.py "${{ inputs.audio }}" "${{ inputs.model }}"

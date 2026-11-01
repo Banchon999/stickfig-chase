@@ -1,4 +1,4 @@
-name: Render Chase
+name: Render video
 
 on:
   workflow_dispatch:
@@ -9,13 +9,25 @@ on:
       frames:
         description: "Total frames (durationInFrames)"
         default: "504"
+      voice:
+        description: "Voice-over file"
+        default: "public/vo/vo2.mp3"
+      cues_module:
+        description: "Module that exports the sound cues"
+        default: "src/Chase"
+      cues_export:
+        description: "Name of the exported cue list"
+        default: "CUES"
+      output:
+        description: "Output file name (no extension)"
+        default: "chase_longtake"
 
 concurrency:
   group: render-${{ github.ref }}
   cancel-in-progress: true
 
 env:
-  CHUNKS: 8
+  CHUNKS: 16
 
 jobs:
   render:
@@ -25,7 +37,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        chunk: [0, 1, 2, 3, 4, 5, 6, 7]
+        chunk: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -78,14 +90,14 @@ jobs:
           ffmpeg -y -v error -f concat -safe 0 -i out/list.txt -c copy out/video.mp4
       - name: Mix voice-over + SFX
         run: |
-          node scripts/export-cues.mjs out/cues.json
-          python3 scripts/mix_chase.py out/cues.json out/audio.m4a
+          node scripts/export-cues.mjs "${{ inputs.cues_module }}" "${{ inputs.cues_export }}" out/cues.json
+          python3 scripts/mix.py out/cues.json "${{ inputs.voice }}" ${{ inputs.frames }} out/audio.m4a
       - name: Mux
         run: |
-          ffmpeg -y -v error -i out/video.mp4 -i out/audio.m4a -map 0:v -map 1:a -c:v copy -c:a copy -shortest -movflags +faststart out/chase_longtake.mp4
-          ffprobe -v error -show_entries format=duration:stream=codec_name,width,height,nb_frames -of compact out/chase_longtake.mp4
+          ffmpeg -y -v error -i out/video.mp4 -i out/audio.m4a -map 0:v -map 1:a -c:v copy -c:a copy -shortest -movflags +faststart out/${{ inputs.output }}.mp4
+          ffprobe -v error -show_entries format=duration:stream=codec_name,width,height,nb_frames -of compact out/${{ inputs.output }}.mp4
       - uses: actions/upload-artifact@v4
         with:
-          name: chase_longtake
-          path: out/chase_longtake.mp4
+          name: ${{ inputs.output }}
+          path: out/${{ inputs.output }}.mp4
           retention-days: 14

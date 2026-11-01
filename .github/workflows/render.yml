@@ -1,0 +1,91 @@
+name: Render Chase
+
+on:
+  workflow_dispatch:
+    inputs:
+      composition:
+        description: "Composition id"
+        default: "Chase"
+      frames:
+        description: "Total frames (durationInFrames)"
+        default: "504"
+
+concurrency:
+  group: render-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CHUNKS: 8
+
+jobs:
+  render:
+    name: Render chunk ${{ matrix.chunk }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        chunk: [0, 1, 2, 3, 4, 5, 6, 7]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Browser libraries
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq libnss3 libdbus-1-3 libatk1.0-0 libgbm-dev libasound2t64 libxrandr2 \
+            libxkbcommon-dev libxfixes3 libxcomposite1 libxdamage1 libatk-bridge2.0-0 libpango-1.0-0 libcairo2 libcups2
+      - run: npm ci --no-audit --no-fund
+      - name: Render frame range
+        run: |
+          TOTAL=${{ inputs.frames }}
+          PER=$(( (TOTAL + CHUNKS - 1) / CHUNKS ))
+          START=$(( ${{ matrix.chunk }} * PER ))
+          END=$(( START + PER - 1 ))
+          if [ $END -ge $TOTAL ]; then END=$(( TOTAL - 1 )); fi
+          echo "frames $START-$END"
+          npx remotion render src/index.ts ${{ inputs.composition }} out/chunk-${{ matrix.chunk }}.mp4 \
+            --frames=$START-$END --codec=h264 --x264-preset=veryfast --muted --concurrency=4 --log=info
+      - uses: actions/upload-artifact@v4
+        with:
+          name: chunk-${{ matrix.chunk }}
+          path: out/chunk-${{ matrix.chunk }}.mp4
+          retention-days: 1
+
+  assemble:
+    name: Join chunks + mix audio
+    needs: render
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
+      - run: python3 -m pip install --quiet numpy
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: chunk-*
+          path: out/chunks
+          merge-multiple: true
+      - name: Join video chunks (no re-encode)
+        run: |
+          for i in $(seq 0 $((CHUNKS - 1))); do echo "file 'chunks/chunk-$i.mp4'" >> out/list.txt; done
+          ffmpeg -y -v error -f concat -safe 0 -i out/list.txt -c copy out/video.mp4
+      - name: Mix voice-over + SFX
+        run: |
+          node scripts/export-cues.mjs out/cues.json
+          python3 scripts/mix_chase.py out/cues.json out/audio.m4a
+      - name: Mux
+        run: |
+          ffmpeg -y -v error -i out/video.mp4 -i out/audio.m4a -map 0:v -map 1:a -c:v copy -c:a copy -shortest -movflags +faststart out/chase_longtake.mp4
+          ffprobe -v error -show_entries format=duration:stream=codec_name,width,height,nb_frames -of compact out/chase_longtake.mp4
+      - uses: actions/upload-artifact@v4
+        with:
+          name: chase_longtake
+          path: out/chase_longtake.mp4
+          retention-days: 14

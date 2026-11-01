@@ -6,7 +6,23 @@ export const FIG = 170 / 665; // stick-figure units → a 170 cm person
 const TAU = Math.PI * 2;
 
 // ---------- people ----------
-export type Person = Pose & { hair?: string; ghost?: number; glow?: number };
+export type Person = Pose & {
+  hair?: string;
+  ghost?: number;
+  glow?: number;
+  // extra drawing in head space (figure units, head centre at (0,-78)); faceX already applied
+  head?: (c: CanvasRenderingContext2D) => void;
+};
+
+// hand position in CENTIMETRES relative to the feet (front-facing arms, sway ignored)
+export function handPos(p: Pose, side: 1 | -1): [number, number] {
+  const [a1, a2] = side === 1 ? p.armR : p.armL;
+  const sx = p.armFwd ? side * 10 : side * 58;
+  const dir = p.armFwd ? 1 : side;
+  const hx = sx + dir * (Math.sin(a1) * 115 + Math.sin(a1 + a2) * 105);
+  const hy = -450 + Math.cos(a1) * 115 + Math.cos(a1 + a2) * 105;
+  return [hx * FIG, hy * FIG];
+}
 export function personCard(p: Person, x: number, z: number, frame: number): Card {
   return {
     x, z, w: 0.7, h: 1.8, shadow: 1,
@@ -31,6 +47,17 @@ export function personCard(p: Person, x: number, z: number, frame: number): Card
         c.quadraticCurveTo(-60, -104, -88, -70);
         c.closePath();
         c.fill();
+        c.restore();
+      }
+      if (p.head) {
+        c.save();
+        c.rotate(p.fall ?? 0);
+        c.scale(FIG, FIG);
+        c.translate(0, -255);
+        c.rotate(p.sway ?? 0);
+        c.translate(0, 255 - 505 + (p.headDrop ?? 0));
+        c.rotate(p.headTilt ?? 0);
+        p.head(c);
         c.restore();
       }
       c.restore();

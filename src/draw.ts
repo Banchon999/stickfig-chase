@@ -24,6 +24,7 @@ export type Pose = {
   legR?: [number, number];
   armFwd?: boolean;
   faceX?: number; // shift eyes+mouth inside the head (look direction)
+  pupilY?: number; // eyes look up (-) / down (+)
   rim?: string; // rim-light glow colour for night scenes
 };
 
@@ -231,7 +232,7 @@ export function drawFigure(ctx: CanvasRenderingContext2D, p: Pose, frame: number
       ctx.stroke();
     } else {
       ctx.beginPath();
-      ctx.ellipse(ex + p.pupilX, hy - 12 + (1 - open) * 6, 10, 15 * open, 0, 0, Math.PI * 2);
+      ctx.ellipse(ex + p.pupilX, hy - 12 + (1 - open) * 6 + (p.pupilY ?? 0), 10, 15 * open, 0, 0, Math.PI * 2);
       ctx.fill();
       // droopy lid
       if (p.tired > 0.3) {

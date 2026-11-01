@@ -22,3 +22,5 @@ jobs:
       - run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
       - run: pip install --quiet faster-whisper numpy
       - run: python scripts/transcribe.py "${{ inputs.audio }}" "${{ inputs.model }}"
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}

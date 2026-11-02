@@ -1,6 +1,7 @@
 // Sets and props for the "Boundaries" clip — all sizes in real metres / centimetres.
 import { basePose, drawFigure, Pose, roundRect } from "../draw";
 import { Cam, Card, project, paper } from "./engine";
+import { chibiHandUnits, chibiHeadSpace, drawChibi, CHIBI } from "./chibi";
 
 export const FIG = 170 / 665; // stick-figure units → a 170 cm person
 const TAU = Math.PI * 2;
@@ -12,10 +13,15 @@ export type Person = Pose & {
   glow?: number;
   // extra drawing in head space (figure units, head centre at (0,-78)); faceX already applied
   head?: (c: CanvasRenderingContext2D) => void;
+  chibi?: boolean; // series v2 hoodie figure
 };
 
 // hand position in CENTIMETRES relative to the feet (front-facing arms, sway ignored)
-export function handPos(p: Pose, side: 1 | -1): [number, number] {
+export function handPos(p: Pose & { chibi?: boolean }, side: 1 | -1): [number, number] {
+  if (p.chibi) {
+    const [ux, uy] = chibiHandUnits(p, side);
+    return [ux * FIG, uy * FIG];
+  }
   const [a1, a2] = side === 1 ? p.armR : p.armL;
   const sx = p.armFwd ? side * 10 : side * 58;
   const dir = p.armFwd ? 1 : side;
@@ -25,7 +31,7 @@ export function handPos(p: Pose, side: 1 | -1): [number, number] {
 }
 export function personCard(p: Person, x: number, z: number, frame: number): Card {
   return {
-    x, z, w: 0.7, h: 1.8, shadow: 1,
+    x, z, w: p.chibi ? 0.85 : 0.7, h: 1.8, shadow: 1,
     draw: (c) => {
       c.save();
       if (p.ghost) c.globalAlpha = 1 - p.ghost;
@@ -33,8 +39,9 @@ export function personCard(p: Person, x: number, z: number, frame: number): Card
         c.shadowColor = `rgba(255,214,120,${0.9 * p.glow})`;
         c.shadowBlur = 40 * p.glow;
       }
-      drawFigure(c, { ...p, x: 0, y: 0, scale: FIG }, frame);
-      if (p.hair) {
+      if (p.chibi) drawChibi(c, { ...p, x: 0, y: 0, scale: FIG }, frame);
+      else drawFigure(c, { ...p, x: 0, y: 0, scale: FIG }, frame);
+      if (p.hair && !p.chibi) {
         // a simple fringe so the partner reads differently from the hero
         c.save();
         c.scale(FIG, FIG);
@@ -53,10 +60,19 @@ export function personCard(p: Person, x: number, z: number, frame: number): Card
         c.save();
         c.rotate(p.fall ?? 0);
         c.scale(FIG, FIG);
-        c.translate(0, -255);
-        c.rotate(p.sway ?? 0);
-        c.translate(0, 255 - 505 + (p.headDrop ?? 0));
-        c.rotate(p.headTilt ?? 0);
+        if (p.chibi) {
+          c.scale(2 - (p.squash ?? 1), p.squash ?? 1);
+          c.translate(0, CHIBI.HIP);
+          c.rotate(p.sway ?? 0);
+          c.translate(0, -CHIBI.HIP + CHIBI.NECK + (p.headDrop ?? 0));
+          c.rotate(p.headTilt ?? 0);
+          chibiHeadSpace(c);
+        } else {
+          c.translate(0, -255);
+          c.rotate(p.sway ?? 0);
+          c.translate(0, 255 - 505 + (p.headDrop ?? 0));
+          c.rotate(p.headTilt ?? 0);
+        }
         p.head(c);
         c.restore();
       }
